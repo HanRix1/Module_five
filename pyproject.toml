@@ -1,0 +1,15 @@
+[project]
+name = "module_five"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "HanRix1", email = "HanRix1@mail.ru"},
+]
+dependencies = ["fastapi>=0.115.8", "uvicorn>=0.34.0"]
+requires-python = "==3.12.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
