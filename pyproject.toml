@@ -5,7 +5,7 @@ description = "Default template for PDM package"
 authors = [
     {name = "HanRix1", email = "HanRix1@mail.ru"},
 ]
-dependencies = ["fastapi>=0.115.8", "uvicorn>=0.34.0"]
+dependencies = ["fastapi>=0.115.8", "uvicorn>=0.34.0", "pydantic-settings>=2.7.1", "sqlalchemy>=2.0.38", "asyncpg>=0.30.0", "redis>=5.2.1"]
 requires-python = "==3.12.*"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,3 +13,8 @@ license = {text = "MIT"}
 
 [tool.pdm]
 distribution = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.7",
+]
