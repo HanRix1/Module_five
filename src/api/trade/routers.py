@@ -1,13 +1,15 @@
 import asyncio
 from datetime import date, datetime, timedelta
 import json
-from typing import Annotated
-from fastapi import APIRouter, Depends, Query
+from typing import Annotated, Any
+from fastapi import APIRouter, Depends, Query, Request
 from api.trade.schemas import DynamicsQueryParamsSchema, FilterSchema
 from db.base import async_session
 from sqlalchemy import desc, distinct, select
 from db.models import SpimexTradingResults as Trade
-from cache.reddis_client import redis_client
+
+from cache.cache_client import RedisCache
+from cache.dependencies import get_redis_cache
 
 
 router = APIRouter(
@@ -32,15 +34,15 @@ async def get_last_trading_dates(
         Query(
             gt=0,
             lt=31,
-            example=1,
+            examples=[1],
             description="Количество последних торговых дней (от 1 до 30).",
         ),
     ],
+    cache: Annotated[RedisCache, Depends(get_redis_cache)]
 ) -> list[date]:
     cache_key = f"last-trading-dates:{count}"
 
-    redis = redis_client.get_client()
-    cached_data = await redis.get(cache_key)
+    cached_data = await cache.get_cached_data(cache_key)
     if cached_data:
         return json.loads(cached_data)
 
@@ -49,19 +51,20 @@ async def get_last_trading_dates(
         result = (await session.scalars(query)).all()
         result_data = [str(row) for row in result]
         time_left = await asyncio.to_thread(time_to_cache_clean)
-        await redis.setex(cache_key, time_left.seconds, json.dumps(result_data))
+        await cache.set_cached_data(cache_key, time_left, result_data)
     return result
 
 
+
 @router.get("/dynamics")
-async def get_dynamics(params: DynamicsQueryParamsSchema = Depends()):
+async def get_dynamics(params: Annotated[DynamicsQueryParamsSchema, Depends()],
+                       cache: Annotated[RedisCache, Depends(get_redis_cache)]):
     cache_key = f"dynamics:{params.start_date}:{params.end_date}:{params.option.oil_id}:{params.option.delivery_type_id}:{params.option.delivery_basis_id}"
 
-    redis = redis_client.get_client()
-    cached_data = await redis.get(cache_key)
+    cached_data = await cache.get_cached_data(cache_key)
     if cached_data:
         return json.loads(cached_data)
-
+  
     async with async_session() as session:
         query = select(Trade).where(
             Trade.date > params.start_date, Trade.date < params.end_date
@@ -80,10 +83,11 @@ async def get_dynamics(params: DynamicsQueryParamsSchema = Depends()):
             )
 
         result = (await session.scalars(query)).all()
-        result_data = [row.as_dict() for row in result]
         time_left = await asyncio.to_thread(time_to_cache_clean)
-        await redis.setex(cache_key, time_left.seconds, json.dumps(result_data))
-
+        result_data = [row.as_dict() for row in result]
+        await cache.set_cached_data(
+            cache_key, time_left.seconds, json.dumps(result_data)
+        )
     return result
 
 
@@ -97,12 +101,11 @@ async def last_date_of_trade() -> date:
 @router.get("/trading-results")
 async def get_trading_results(
     option: Annotated[FilterSchema, Depends()],
-    date: Annotated[date, Depends(last_date_of_trade)],
+    cache: RedisCache = Depends(get_redis_cache),
 ):
     cache_key = f"trading-results:{option.oil_id}:{option.delivery_type_id}:{option.delivery_basis_id}"
 
-    redis = redis_client.get_client()
-    cached_data = await redis.get(cache_key)
+    cached_data = await cache.get_cached_data(cache_key)
     if cached_data:
         return json.loads(cached_data)
 
@@ -120,7 +123,8 @@ async def get_trading_results(
         result = (await session.scalars(query)).all()
         time_left = await asyncio.to_thread(time_to_cache_clean)
         result_data = [row.as_dict() for row in result]
-        await redis.setex(
+        await cache.set_cached_data(
             cache_key, time_left.seconds, json.dumps(result_data)
         )
     return result
+
