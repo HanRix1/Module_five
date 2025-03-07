@@ -35,7 +35,7 @@ class SpimexTradingResults(Base):
             "volume": self.volume,
             "total": self.total,
             "count": self.count,
-            "date": self.date.isoformat(),  # Преобразование datetime в строку
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            "date": str(self.date),
+            "created_at": str(self.created_at),
+            "updated_at": str(self.updated_at),
         }

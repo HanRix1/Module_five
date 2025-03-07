@@ -85,9 +85,7 @@ async def get_dynamics(params: Annotated[DynamicsQueryParamsSchema, Depends()],
         result = (await session.scalars(query)).all()
         time_left = await asyncio.to_thread(time_to_cache_clean)
         result_data = [row.as_dict() for row in result]
-        await cache.set_cached_data(
-            cache_key, time_left.seconds, json.dumps(result_data)
-        )
+        await cache.set_cached_data(cache_key, time_left, result_data)
     return result
 
 
@@ -101,7 +99,8 @@ async def last_date_of_trade() -> date:
 @router.get("/trading-results")
 async def get_trading_results(
     option: Annotated[FilterSchema, Depends()],
-    cache: RedisCache = Depends(get_redis_cache),
+    cache: Annotated[RedisCache, Depends(get_redis_cache)],
+    date: Annotated[date, Depends(last_date_of_trade)]
 ):
     cache_key = f"trading-results:{option.oil_id}:{option.delivery_type_id}:{option.delivery_basis_id}"
 
@@ -123,8 +122,5 @@ async def get_trading_results(
         result = (await session.scalars(query)).all()
         time_left = await asyncio.to_thread(time_to_cache_clean)
         result_data = [row.as_dict() for row in result]
-        await cache.set_cached_data(
-            cache_key, time_left.seconds, json.dumps(result_data)
-        )
+        await cache.set_cached_data(cache_key, time_left, result_data)
     return result
-
