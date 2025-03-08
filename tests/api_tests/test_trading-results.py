@@ -1,20 +1,8 @@
-import pytest
-from fastapi.testclient import TestClient
-from unittest import mock
-from datetime import date
 import json
-from api.app import create_app
+import pytest
 from api.trade.schemas import FilterSchema
-from db.base import async_session
 from db.models import SpimexTradingResults as Trade
-
-@pytest.fixture(scope="class")
-def application():
-    return create_app()
-
-@pytest.fixture(scope="class")
-def client(application):
-    return TestClient(application)
+from unittest.mock import MagicMock
 
 
 @pytest.mark.usefixtures("client")
@@ -30,21 +18,8 @@ class TestGetTraidingResult:
             "delivery_type_id": option.delivery_type_id,
             "delivery_basis_id": option.delivery_basis_id,
         }
-
-    @pytest.mark.asyncio
-    async def test_get_trading_results_cache_hit(self):
-        with mock.patch(
-            "api.trade.routers.RedisCache.get_cached_data",
-            return_value=json.dumps([{"oil_id": "A100", "delivery_type_id": "NVY"}])
-        ) as redis_method:
-            response = self.client.get("/trades/trading-results", params=self.params)
-
-            assert response.status_code == 200
-
-
-    @pytest.mark.asyncio
-    async def test_get_trading_results_cache_no_hit(self):
-        fake_db_result = [
+        
+        self.fake_db_result = [
             Trade(
                 exchange_product_name="Бензин (АИ-100-К5), ст. Новоярославская (ст. отправления)",
                 delivery_basis_id="NVY",
@@ -62,11 +37,28 @@ class TestGetTraidingResult:
             )
         ]
 
-        with mock.patch("api.trade.routers.RedisCache.get_cached_data", return_value=None) as redis_get_mock, \
-        mock.patch("api.trade.routers.RedisCache.set_cached_data") as redis_set_mock:
+    @pytest.mark.asyncio
+    async def test_get_trading_results_with_no_cache(self, mock_redis_cache, mock_db_session):
+        
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = self.fake_db_result
+        mock_db_session.scalars.return_value = mock_scalars
 
-            response = self.client.get("/trades/trading-results", params=self.params)
+        mock_redis_cache.get_cached_data.return_value = None
+        mock_redis_cache.set_cached_data.return_value = None
+        response = self.client.get("/trades/trading-results", params=self.params)
 
-            assert response.status_code == 200
-            assert response.json() == [row.as_dict() for row in fake_db_result]
+        assert response.status_code == 200
+        assert response.json() == [row.as_dict() for row in self.fake_db_result]
+
+    @pytest.mark.asyncio
+    async def test_get_trading_results_with_cache(self, mock_redis_cache, mock_db_session):
+
+        fake_db_result_dicts = [row.as_dict() for row in self.fake_db_result]
+        mock_redis_cache.get_cached_data.return_value = json.dumps(fake_db_result_dicts)
+        response = self.client.get("/trades/trading-results", params=self.params)
+
+        assert response.status_code == 200
+        assert response.json() == [row.as_dict() for row in self.fake_db_result]
+
 

@@ -2,7 +2,7 @@ from typing import AsyncGenerator
 from fastapi import Depends
 from redis import Redis
 import redis.asyncio as redis
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from cache.cache_client import RedisCache
 
 async def get_redis_client() -> AsyncGenerator[Redis, None]:
